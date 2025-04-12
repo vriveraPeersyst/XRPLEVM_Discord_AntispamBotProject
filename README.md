@@ -1,57 +1,40 @@
-
 # XRPL EVM Antispam Bot
 
-A Discord bot designed to help manage spam in the XRPL EVM Discord community. The bot automatically deletes spam messages (e.g., "hi", "gm", "hello", or messages that simply match the channel name), tracks spam counts per user, and assigns a restricted role once a user exceeds a defined spam threshold.
+The **XRPL EVM Antispam Bot** is designed to help moderate spam in your XRPL EVM Discord community. It detects spam messages based on specific keywords and channel-name matching rules, tracks spam counts persistently across bot restarts, and automatically assigns a restricted role when the spam threshold is exceeded.
+
+---
 
 ## Features
 
-- **Spam Message Deletion:**  
-  Detects and deletes messages matching configured spam keywords or that match the channel name, after a 60-second delay.
+- **Spam Detection:**  
+  - Flags messages that match defined keywords (e.g. `"hi"`, `"gm"`, `"hello", "xrpl"`).  
+  - Detects single-word messages that appear anywhere in the channel’s name (e.g. detecting `"funding"` in a channel named "💰・funding").
 
-- **Real-Time Antispam:**  
-  Monitors all new messages to identify and handle spam promptly.
+- **Spam Tracking:**  
+  - Increments a user's spam count upon every detected spam message.
+  - Persists spam counts to `spamCounts.json` so data survives bot restarts.
 
-- **Channel Exclusion:**  
-  Ignores spam detection on specified channels (configured via the settings).
+- **Role Management:**  
+  - Automatically assigns a restricted role when a member exceeds 3 spam messages.
+  - Ensures the restricted role is only assigned if the user does not already have it.
 
-- **Spam Tracking & Role Management:**  
-  Tracks spam counts per user and assigns a restricted role to users that exceed a pre-defined spam threshold (default: 3 spam messages).
+- **Message Cleanup:**  
+  - Deletes spam messages 30 seconds after detection, helping to keep channels clean.
 
-## Repository Structure
+---
 
-```plaintext
-xrplevm-antispam-bot/
-├── .env.example                # Example environment file with necessary variables
-├── apps
-│   └── bot
-│       └── src
-│           ├── bot.factory.ts           # Discord bot client factory
-│           ├── main.ts                  # Bot entry point and event handling
-│           ├── config/
-│           │   └── index.ts             # Configuration settings (spam keywords, ignored channels, etc.)
-│           ├── features/
-│           │   ├── spam-detection
-│           │   │   ├── detector.service.ts  # Spam detection logic
-│           │   │   ├── tracker.service.ts   # Spam count tracking logic
-│           │   └── role-manager
-│           │       └── role-manager.ts      # Role management (assigning restricted role)
-│           └── utils/                    # Utility functions (if needed)
-│           └── test/                     # Test files for unit tests
-├── directory-skeleton.txt      # Directory structure snapshot file
-├── package.json                # Package definition and dependencies
-├── pnpm-workspace.yaml         # pnpm workspace configuration
-└── tsconfig.json               # TypeScript configuration
-```
-
-## Getting Started
+## Installation & Setup
 
 ### Prerequisites
 
-- **Node.js:** Version 16 or later (LTS recommended)  
-- **pnpm:** Install globally with `npm install -g pnpm`  
-- **Discord Bot:** Create a bot via the [Discord Developer Portal](https://discord.com/developers/applications) and obtain your bot token.
+- **Node.js:** Version 16 or later (LTS recommended).
+- **pnpm:** Install via `npm install -g pnpm`.
+- **Discord Bot:**  
+  - Create a bot via the [Discord Developer Portal](https://discord.com/developers/applications).  
+  - Ensure the bot has the **Manage Messages** and **Manage Roles** permissions.  
+  - Verify that the bot’s role is above the restricted role in your server’s role hierarchy.
 
-### Installation
+### Clone & Install
 
 1. **Clone the Repository:**
 
@@ -62,70 +45,109 @@ xrplevm-antispam-bot/
 
 2. **Install Dependencies:**
 
-   Since dependencies are managed at the root level, run:
-
    ```bash
    pnpm install -w
    ```
 
 3. **Configure Environment Variables:**
 
-   - Copy `.env.example` to `.env`:
-     
+   - Copy the example file:
+
      ```bash
      cp .env.example .env
      ```
 
-   - Edit the `.env` file to include your Discord bot token and the restricted role ID:
+   - Edit `.env` and set your Discord bot token and restricted role ID:
 
      ```dotenv
      TOKEN=your_discord_bot_token_here
      RESTRICTED_ROLE_ID=your_restricted_role_id_here
      ```
 
-### Running the Bot
+---
 
-Start the bot in development mode with:
+## Running the Bot
+
+Launch the bot using:
 
 ```bash
 pnpm run dev:bot
 ```
 
-The bot will log in to Discord using the provided token. It will monitor messages, automatically delete detected spam after a 60-second delay, track user spam counts, and assign a restricted role if a user exceeds the spam threshold.
+The bot logs critical events to the console, such as successful login, spam message detection, spam count increments, role assignments, and deletion of spam messages after a 30-second delay.
 
-## Testing
+---
 
-If you add tests, run them (for example, using Jest) with:
+## Repository Structure
 
-```bash
-pnpm test
+```plaintext
+xrplevm-antispam-bot/
+├── .env.example                   # Example environment configuration
+├── apps
+│   └── bot
+│       └── src
+│           ├── bot.factory.ts     # Discord client factory
+│           ├── main.ts            # Entry point & event handling
+│           └── features
+│               ├── role-manager
+│               │   └── role-manager.ts    # Role assignment service
+│               └── spam-detection
+│                   ├── config
+│                   │   └── index.ts       # Configuration (keywords, ignored channels, etc.)
+│                   ├── detector.service.ts  # Spam detection logic
+│                   └── tracker.service.ts   # Spam tracking & persistent storage
+├── package.json                   # Project metadata and dependencies
+├── pnpm-workspace.yaml            # pnpm workspace configuration
+├── spamCounts.json                # Persistent storage for spam counts
+└── tsconfig.json                  # TypeScript configuration
 ```
 
-## Configuration
+*Total: 8 directories, 11 files*
 
-All configurable options are centralized in `apps/bot/src/config/index.ts`:
-- **spamKeywords:** An array of keywords considered as spam. (Default: `["hi", "gm", "hello"]`)
-- **ignoredChannels:** A list of channel IDs where the bot should not perform spam detection.
-- **restrictedRoleId:** The role ID to assign to users who exceed the spam threshold.
-- **restrictedChannels (Optional):** Further configuration for channels accessible to restricted users.
+---
+
+## How It Works
+
+1. **Initialization:**  
+   - The bot loads environment variables and initializes the Discord client using `bot.factory.ts`.
+   - When ready, it logs the bot's tag (e.g., "Logged in as XRPLEVM_Antispam_bot#9445!").
+
+2. **Message Monitoring:**  
+   - The bot listens for every message (ignoring bot messages and non-guild messages).
+   - Each message is passed to `isSpamMessage` in the detector service:
+     - The message is normalized (trimmed and converted to lowercase).
+     - It checks for exact spam keyword matches.
+     - It further checks if a single-word message is included anywhere in the channel's name.
+
+3. **Spam Tracking & Role Assignment:**  
+   - For every detected spam message, the bot increments the user’s spam count.
+   - Spam counts are persisted in `spamCounts.json`.
+   - When a user's spam count reaches 3, the bot assigns the restricted role (using `assignRestrictedRole`) and resets the count.
+
+4. **Message Cleanup:**  
+   - Spam messages are scheduled for deletion after 30 seconds, ensuring channels remain clutter-free.
+
+---
 
 ## Contributing
 
-Contributions are welcome! If you'd like to improve the bot or add features, please:
+Contributions are welcome! If you have suggestions, feature additions, or bug fixes:
 
 1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/YourFeature`).
-3. Commit your changes.
-4. Push your changes and open a pull request.
+2. Create a feature branch: `git checkout -b feature/YourFeature`.
+3. Commit your changes and push the branch.
+4. Open a pull request explaining your changes.
 
-For major changes, please open an issue first to discuss what you would like to change.
+---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the [MIT License](LICENSE).
+
+---
 
 ## Acknowledgments
 
-- [discord.js](https://discord.js.org/)
-- [pnpm](https://pnpm.io/)
-- Community inspirations and contributions to anti-spam solutions in Discord communities.
+- [discord.js](https://discord.js.org/) – For providing the robust framework used in this project.
+- The XRPL and Discord communities – For inspiration and feedback.
+- All contributors who help improve the project.

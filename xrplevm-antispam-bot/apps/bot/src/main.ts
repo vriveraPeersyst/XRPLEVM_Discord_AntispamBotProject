@@ -27,7 +27,7 @@ client.on('messageCreate', async (message) => {
     // Check the spam count and assign a restricted role if necessary.
     await checkAndApplyRestriction(message.member);
 
-    // Schedule deletion of the spam message after a 60-second delay.
+    // Schedule deletion of the spam message after a 30-second delay.
     setTimeout(async () => {
       try {
         await message.delete();
@@ -35,7 +35,7 @@ client.on('messageCreate', async (message) => {
       } catch (error) {
         console.error(`Error deleting message from ${message.author.tag}: ${error}`);
       }
-    }, 60000);
+    }, 30000);
   }
 });
 
