@@ -1,0 +1,21 @@
+{
+  "name": "xrplevm-antispam-bot",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:bot": "ts-node apps/bot/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.5.0"
+  }
+}

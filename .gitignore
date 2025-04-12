@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+
+# Build output directories
+dist/
+build/
+
+# pnpm, npm, and yarn lock files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Environment variable files (do not commit your secrets)
+.env
+
+# Log files
+logs/
+*.log
+
+# OS generated files (macOS, Windows)
+.DS_Store
+Thumbs.db
+
+# Editor / IDE specific files
+.vscode/
+.idea/
+
+# Temporary files and folders
+tmp/
+temp/
