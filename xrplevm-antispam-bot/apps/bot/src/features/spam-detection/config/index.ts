@@ -17,6 +17,14 @@ export function getConfig() {
       "1143643231930810462",
       "1352703976050528327"
     ],
+
+    // List of category IDs to ignore.
+    // Channels that belong to any of these categories will be skipped.
+    ignoredCategories: [
+      // Add your ignored category IDs here. For example:
+      "1146153580085121165"
+    ],
+    
     
     // The ID of the restricted role to assign when a member sends too many spam messages.
     restrictedRoleId: restrictedRoleId,
