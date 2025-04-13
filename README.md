@@ -1,8 +1,4 @@
-Below is the updated README file for your final version:
 
----
-
-```markdown
 # XRPL EVM Antispam Bot
 
 The XRPL EVM Antispam Bot helps keep our Discord clean by automatically detecting and removing spam messages. It works both in real time (during message creation) and via a historical purge script. Additionally, the bot tracks spam counts persistently and (in real-time operation) assigns a restricted role to repeat offenders.
@@ -163,7 +159,6 @@ This project is licensed under the [MIT License](LICENSE).
 
 - [discord.js](https://discord.js.org/) for the Discord API framework.
 - The XRPL and Discord communities for ongoing inspiration and support.
-```
 
 ---
 
