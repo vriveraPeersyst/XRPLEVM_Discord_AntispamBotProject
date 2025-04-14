@@ -24,6 +24,9 @@ export function getConfig() {
       // Add your ignored category IDs here. For example:
       "1146153580085121165"
     ],
+
+    // Admin log channel ID (private channel for admin logs).
+    adminLogChannelId: process.env.ADMIN_LOG_CHANNEL_ID || "",
     
     
     // The ID of the restricted role to assign when a member sends too many spam messages.
