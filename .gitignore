@@ -28,3 +28,5 @@ Thumbs.db
 # Temporary files and folders
 tmp/
 temp/
+
+spamCounts.json
