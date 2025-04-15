@@ -8,7 +8,7 @@ export function getConfig() {
 
   return {
     // List of keywords considered spam.
-    spamKeywords: ["hi", "gm", "hello", "xrpl"],
+    spamKeywords: ["hi", "gm", "hello", "xrpl", "lfg"],
     
     // List of channel IDs to ignore in spam detection.
     // intros, general, faucet
