@@ -1,0 +1,544 @@
+====================================
+          REPO STRUCTURE            
+====================================
+xrplevm-antispam-bot
+├── apps
+│   └── bot
+│       └── src
+│           ├── bot.factory.ts
+│           ├── features
+│           │   ├── role-manager
+│           │   │   └── role-manager.ts
+│           │   └── spam-detection
+│           │       ├── config
+│           │       │   └── index.ts
+│           │       ├── detector.service.ts
+│           │       └── tracker.service.ts
+│           ├── logger.ts
+│           ├── main.ts
+│           └── purgeHistory.ts
+├── ecosystem.config.js
+├── .env.example
+├── package.json
+├── pnpm-workspace.yaml
+├── spamCounts.json
+└── tsconfig.json
+
+8 directories, 14 files
+
+
+====================================
+          FILE CONTENTS             
+====================================
+
+-------- xrplevm-antispam-bot/.env.example --------
+TOKEN=your_discord_bot_token_here
+RESTRICTED_ROLE_ID=your_restricted_role_id_here
+ADMIN_LOG_CHANNEL_ID=your_admin_log_channel_id_here
+-------- xrplevm-antispam-bot/package.json --------
+{
+  "name": "xrplevm-antispam-bot",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:bot": "ts-node apps/bot/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.5.0"
+  }
+}
+-------- xrplevm-antispam-bot/tsconfig.json --------
+{
+    "compilerOptions": {
+      "target": "ES2021",
+      "module": "CommonJS",
+      "rootDir": ".",
+      "baseUrl": ".",
+      "paths": {
+        "@shared/*": ["packages/shared/*"]
+      },
+      "strict": true,
+      "esModuleInterop": true,
+      "moduleResolution": "node",
+      "resolveJsonModule": true,
+      "outDir": "dist"
+    },
+    "include": ["apps", "packages"]
+  }
+  
+-------- xrplevm-antispam-bot/pnpm-workspace.yaml --------
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+-------- xrplevm-antispam-bot/ecosystem.config.js --------
+module.exports = {
+    apps: [
+      {
+        name: "xrplevm-antispam-bot",
+        script: "npm",
+        args: "run dev:bot",
+        watch: false,
+        env: {
+          NODE_ENV: "production"
+        }
+      }
+    ]
+  };
+  
+-------- xrplevm-antispam-bot/apps/bot/src/logger.ts --------
+// apps/bot/src/logger.ts
+
+import { Client, TextChannel, DMChannel, NewsChannel } from "discord.js";
+import { getConfig } from "./features/spam-detection/config";
+
+/**
+ * Sends a log message to the designated admin log channel.
+ * @param client The Discord client.
+ * @param logMessage The message to send.
+ */
+export async function sendAdminLog(client: Client, logMessage: string): Promise<void> {
+  const config = getConfig();
+  const adminChannelId = config.adminLogChannelId;
+  if (!adminChannelId) return; // If no admin channel is configured, do nothing.
+  
+  try {
+    const channel = await client.channels.fetch(adminChannelId);
+    // Check if the channel is text-based and has a "send" method.
+    if (channel && (channel instanceof TextChannel || channel instanceof DMChannel || channel instanceof NewsChannel)) {
+        await channel.send(logMessage);
+    } else {
+        console.error("The fetched channel cannot send messages or is not a text-based channel.");
+    }
+  } catch (error) {
+    console.error("Error sending admin log:", error);
+  }
+}
+
+-------- xrplevm-antispam-bot/apps/bot/src/bot.factory.ts --------
+// apps/bot/src/bot.factory.ts
+
+import { Client, GatewayIntentBits } from 'discord.js';
+
+export function createBotClient(): Client {
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent, // Needed to access the content of the messages.
+    ],
+  });
+
+  client.once('ready', () => {
+    console.log(`Logged in as ${client.user?.tag}!`);
+  });
+
+  return client;
+}
+
+-------- xrplevm-antispam-bot/apps/bot/src/purgeHistory.ts --------
+// apps/bot/src/purgeHistory.ts
+
+import { Client, TextChannel, NewsChannel, ThreadChannel, GuildBasedChannel } from 'discord.js';
+import { createBotClient } from './bot.factory';
+import { isSpamMessage } from './features/spam-detection/detector.service';
+import { config as dotenvConfig } from 'dotenv';
+import { getConfig } from './features/spam-detection/config';
+
+dotenvConfig();
+
+const client: Client = createBotClient();
+
+client.once('ready', async () => {
+  console.log(`Bot is ready. Starting purge of spam messages...`);
+
+  const config = getConfig();
+
+  // Iterate through each guild the bot is in.
+  for (const guild of client.guilds.cache.values()) {
+    console.log(`Processing guild: ${guild.name} (${guild.id})`);
+
+    // Get all text-based channels.
+    const channels = guild.channels.cache.filter(
+      (channel: GuildBasedChannel) =>
+        channel instanceof TextChannel ||
+        channel instanceof NewsChannel ||
+        channel instanceof ThreadChannel
+    ) as Map<string, TextChannel | NewsChannel | ThreadChannel>;
+
+    for (const channel of channels.values()) {
+      // Skip channels that are explicitly ignored.
+      if (config.ignoredChannels.includes(channel.id)) {
+        console.log(`Skipping ignored channel: ${channel.id}`);
+        continue;
+      }
+
+      // Skip channels that belong to an ignored category.
+      if (channel.parent && config.ignoredCategories.includes(channel.parent.id)) {
+        console.log(
+          `Skipping channel ${channel.name} (ID: ${channel.id}) because its category ${channel.parent.name} (ID: ${channel.parent.id}) is ignored.`
+        );
+        continue;
+      }
+
+      console.log(`Processing channel: ${channel.name} (${channel.id})`);
+
+      let lastId: string | undefined = undefined;
+      let totalFetched = 0;
+      let spamDeleted = 0;
+
+      // Paginate through channel messages in batches.
+      while (true) {
+        try {
+          const fetchOptions: { limit: number; before?: string } = { limit: 100 };
+          if (lastId) fetchOptions.before = lastId;
+          const messages = await channel.messages.fetch(fetchOptions);
+
+          if (messages.size === 0) break;
+          totalFetched += messages.size;
+
+          for (const message of messages.values()) {
+            // Skip messages from bots.
+            if (message.author.bot) continue;
+            // Delete message if it qualifies as spam.
+            if (isSpamMessage(message)) {
+              try {
+                await message.delete();
+                spamDeleted++;
+                console.log(
+                  `Deleted spam message [${message.id}] from ${message.author.tag} in ${channel.name}`
+                );
+              } catch (error) {
+                console.error(`Error deleting message [${message.id}] in channel ${channel.id}:`, error);
+              }
+            }
+          }
+          lastId = messages.last()?.id;
+        } catch (err) {
+          console.error(`Error fetching messages from channel ${channel.id}:`, err);
+          break;
+        }
+      }
+
+      console.log(
+        `Finished channel ${channel.name}: Fetched ${totalFetched} messages, deleted ${spamDeleted} spam messages.`
+      );
+    }
+  }
+
+  console.log('Purge complete. Exiting.');
+  process.exit(0);
+});
+
+client.login(process.env.TOKEN);
+
+-------- xrplevm-antispam-bot/apps/bot/src/features/spam-detection/detector.service.ts --------
+// apps/bot/src/features/spam-detection/detector.service.ts
+
+import { Message, TextChannel, NewsChannel, ThreadChannel } from 'discord.js';
+import { getConfig } from './config';
+
+/**
+ * Determines if the provided message should be flagged as spam.
+ *
+ * Rules applied:
+ * - Skips if the message channel is in the ignored list.
+ * - Skips if the channel's parent category is in the ignored categories list.
+ * - Normalizes the message (trim + lowercase).
+ * - Checks for exact matches with spam keywords, e.g. "hi", "gm", "hello".
+ * - Also checks if the message is a single word and is included within the channel's name (case-insensitive).
+ */
+export function isSpamMessage(message: Message): boolean {
+  const config = getConfig();
+  console.log(`Checking message: "${message.content}" from channel ${message.channel.id}`);
+
+  // Skip if the channel is in the ignored list.
+  if (config.ignoredChannels.includes(message.channel.id)) {
+    return false;
+  }
+
+  // Skip if the channel belongs to an ignored category.
+  const channel = message.channel;
+  if ('parent' in channel && channel.parent && config.ignoredCategories.includes(channel.parent.id)) {
+    console.log(`Channel ${channel.id} belongs to an ignored category (${channel.parent.id}). Skipping spam check.`);
+    return false;
+  }
+
+  const normalizedContent = message.content.trim().toLowerCase();
+  console.log(`Normalized content: "${normalizedContent}"`);
+
+  // Check for spam keywords.
+  if (config.spamKeywords.includes(normalizedContent)) {
+    console.log(`Matched spam keyword.`);
+    return true;
+  }
+
+  // Check if the channel has a name property.
+  if ('name' in channel && typeof channel.name === 'string') {
+    console.log(`Checking channel name: "${channel.name}"`);
+
+    // Proceed only if the message is a single word.
+    if (normalizedContent.indexOf(" ") === -1) {
+      // Check if the channel's name (in lowercase) includes the message.
+      if (channel.name.toLowerCase().includes(normalizedContent)) {
+        console.log(`Channel name "${channel.name}" includes message "${normalizedContent}" (single word).`);
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+-------- xrplevm-antispam-bot/apps/bot/src/features/spam-detection/config/index.ts --------
+// apps/bot/src/config/index.ts
+
+export function getConfig() {
+  const restrictedRoleId = process.env.RESTRICTED_ROLE_ID;
+  if (!restrictedRoleId) {
+    throw new Error("RESTRICTED_ROLE_ID is not defined in your environment variables!");
+  }
+
+  return {
+    // List of keywords considered spam.
+    spamKeywords: ["hi", "gm", "hello", "xrpl", "lfg", "gmm", "helo", "halo", "halloe", "hii", "hey", "hay", "hei", "hai", "heloo"],
+    
+    // List of channel IDs to ignore in spam detection.
+    // intros, general, faucet
+    ignoredChannels: [
+      "1144272382501081098",
+      "1143643231930810462",
+      "1352703976050528327"
+    ],
+
+    // List of category IDs to ignore.
+    // Channels that belong to any of these categories will be skipped.
+    ignoredCategories: [
+      // Add your ignored category IDs here. For example:
+      "1146153580085121165"
+    ],
+
+    // Admin log channel ID (private channel for admin logs).
+    adminLogChannelId: process.env.ADMIN_LOG_CHANNEL_ID || "",
+    
+    
+    // The ID of the restricted role to assign when a member sends too many spam messages.
+    restrictedRoleId: restrictedRoleId,
+    
+    // Optionally, add configuration for channels the restricted role can access.
+    restrictedChannels: {
+      read: [
+        // List allowed channel IDs for reading.
+      ],
+      write: [
+        // List allowed channel IDs for writing (usually a subset, e.g., 3 channels).
+      ],
+    },
+  };
+}
+
+-------- xrplevm-antispam-bot/apps/bot/src/features/spam-detection/tracker.service.ts --------
+// apps/bot/src/features/spam-detection/tracker.service.ts
+
+import { GuildMember } from 'discord.js';
+import { getConfig } from '../../../src/features/spam-detection/config';
+import { assignRestrictedRole } from '../role-manager/role-manager';
+import fs from 'fs';
+import path from 'path';
+
+const DATA_FILE = path.join(process.cwd(), 'spamCounts.json');
+
+// In-memory map to track spam message counts by member ID.
+let spamCounts: Map<string, number> = new Map();
+
+/**
+ * Loads the spam count data from the JSON file.
+ */
+function loadSpamCounts() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = fs.readFileSync(DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(data) as Record<string, number>;
+      spamCounts = new Map(Object.entries(parsed));
+      console.log('Loaded spam counts:', spamCounts);
+    }
+  } catch (err) {
+    console.error('Error loading spam counts:', err);
+  }
+}
+
+/**
+ * Saves the current spam counts into the JSON file.
+ */
+function saveSpamCounts() {
+  try {
+    // Convert the Map into a plain object
+    const data = JSON.stringify(Object.fromEntries(spamCounts), null, 2);
+    fs.writeFileSync(DATA_FILE, data, 'utf-8');
+    console.log('Spam counts saved.');
+  } catch (err) {
+    console.error('Error saving spam counts:', err);
+  }
+}
+
+// Load persistent spam counts on module initialization.
+loadSpamCounts();
+
+// Spam threshold before restricted role is applied.
+const SPAM_THRESHOLD = 3;
+
+/**
+ * Increments the spam count for a given guild member.
+ * @param member - The guild member sending a potential spam message.
+ * @returns The new spam count for the member.
+ */
+export function incrementSpamCount(member: GuildMember): number {
+  const memberId = member.id;
+  const currentCount = spamCounts.get(memberId) || 0;
+  const newCount = currentCount + 1;
+  spamCounts.set(memberId, newCount);
+  console.log(`Spam count for ${member.user.tag} is now ${newCount}`);
+  saveSpamCounts();
+  return newCount;
+}
+
+/**
+ * Checks if the member has reached the spam threshold and applies the restricted role if needed.
+ * If the threshold is met, it calls the role manager and resets the spam count.
+ * @param member - The guild member to check.
+ */
+export async function checkAndApplyRestriction(member: GuildMember): Promise<void> {
+  const count = spamCounts.get(member.id) || 0;
+  if (count >= SPAM_THRESHOLD) {
+    const config = getConfig();
+    try {
+      await assignRestrictedRole(member, config.restrictedRoleId);
+      console.log(`Restricted role assigned to ${member.user.tag} after ${count} spam messages.`);
+      // Reset the count after role assignment.
+      spamCounts.set(member.id, 0);
+      saveSpamCounts();
+    } catch (error) {
+      console.error(`Error applying restricted role for ${member.user.tag}: ${error}`);
+    }
+  }
+}
+
+/**
+ * Gets the current spam count for a given member.
+ * @param memberId - The Discord ID of the member.
+ * @returns The current spam count (0 if not found).
+ */
+export function getSpamCount(memberId: string): number {
+  return spamCounts.get(memberId) || 0;
+}
+
+/**
+ * Resets the spam count for a given member.
+ * @param memberId - The Discord ID of the member.
+ */
+export function resetSpamCount(memberId: string): void {
+  spamCounts.delete(memberId);
+  saveSpamCounts();
+}
+
+-------- xrplevm-antispam-bot/apps/bot/src/features/role-manager/role-manager.ts --------
+// apps/bot/src/features/role-manager/role-manager.service.ts
+
+import { GuildMember } from 'discord.js';
+
+/**
+ * Assigns the restricted role to a member.
+ * @param member - The guild member to update.
+ * @param restrictedRoleId - The ID of the restricted role to be applied.
+ */
+export async function assignRestrictedRole(
+  member: GuildMember,
+  restrictedRoleId: string
+): Promise<void> {
+  // Check if the member already has the restricted role to avoid duplicate work.
+  if (member.roles.cache.has(restrictedRoleId)) {
+    console.log(`${member.user.tag} already has the restricted role.`);
+    return;
+  }
+
+  try {
+    await member.roles.add(restrictedRoleId);
+    console.log(`Assigned restricted role to ${member.user.tag}`);
+  } catch (error) {
+    console.error(`Failed to assign restricted role to ${member.user.tag}: ${error}`);
+  }
+}
+
+-------- xrplevm-antispam-bot/apps/bot/src/main.ts --------
+// apps/bot/src/main.ts
+
+import { Client } from 'discord.js';
+import { createBotClient } from './bot.factory';
+import { isSpamMessage } from './features/spam-detection/detector.service';
+import { incrementSpamCount, checkAndApplyRestriction } from './features/spam-detection/tracker.service';
+import { config as dotenvConfig } from 'dotenv';
+import { sendAdminLog } from './logger';
+
+dotenvConfig();
+
+const client: Client = createBotClient();
+
+client.on('messageCreate', async (message) => {
+  // Ignore messages from bots.
+  if (message.author.bot) return;
+
+  // Only process messages from guilds.
+  if (!message.guild || !message.member) return;
+
+  // Check if the message is considered spam.
+  if (isSpamMessage(message)) {
+    console.log(`Spam message detected from ${message.author.tag}: "${message.content}"`);
+
+    // Immediately increment the spam count for the user.
+    incrementSpamCount(message.member);
+
+    // Check the spam count and assign a restricted role if necessary.
+    await checkAndApplyRestriction(message.member);
+
+    // Schedule deletion of the spam message after a 30-second delay.
+    setTimeout(async () => {
+      try {
+        await message.delete();
+        console.log(`Deleted spam message from ${message.author.tag}`);
+
+        // Safely retrieve the channel name if available.
+        const channelName =
+          'name' in message.channel && typeof message.channel.name === 'string'
+            ? message.channel.name
+            : 'Unknown Channel';
+
+        // Send deletion log to the admin log channel, including the sender's name.
+        await sendAdminLog(
+          client,
+          `Deleted spam message from **${message.author.tag}** in **${channelName}**: "${message.content}"`
+        );
+      } catch (error) {
+        console.error(`Error deleting message from ${message.author.tag}: ${error}`);
+      }
+    }, 30000);
+  }
+});
+
+// Start the bot by logging in with the token provided in the .env file.
+client.login(process.env.TOKEN);
+
+-------- xrplevm-antispam-bot/spamCounts.json --------
+{
+  "1142665138395160677": 1,
+  "1233392974054953043": 1,
+...
