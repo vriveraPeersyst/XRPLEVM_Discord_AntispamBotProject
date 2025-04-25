@@ -1,3 +1,5 @@
+// apps/bot/src/main.ts
+
 import { Client } from 'discord.js';
 import { createBotClient } from './bot.factory';
 import { isSpamMessage } from './features/spam-detection/detector.service';
@@ -5,13 +7,17 @@ import { incrementSpamCount, checkAndApplyRestriction } from './features/spam-de
 import { config as dotenvConfig } from 'dotenv';
 import { sendAdminLog } from './logger';
 import { registerFaucetGuard } from './features/scam-prevention/faucet-guard';
+import { registerPhishingLinkGuard } from './features/scam-prevention/phishing-link-guard';
 
 dotenvConfig();
 
 const client: Client = createBotClient();
 
-// Register the faucet-guard before other handlers
+// 1) Prevent invalid faucet commands
 registerFaucetGuard(client);
+
+// 2) Catch phishing links & suspicious faucet-scam keywords
+registerPhishingLinkGuard(client);
 
 client.on('messageCreate', async (message) => {
   // Ignore messages from bots.
