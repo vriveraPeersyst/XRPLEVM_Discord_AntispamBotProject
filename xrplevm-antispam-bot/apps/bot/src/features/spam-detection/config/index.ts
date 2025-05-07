@@ -8,14 +8,18 @@ export function getConfig() {
 
   return {
     // List of keywords considered spam.
-    spamKeywords: ["hi", "gm", "hello", "xrpl", "lfg", "gmm", "helo", "halo", "halloe", "hii", "hey", "hay", "hei", "hai", "heloo"],
+    spamKeywords: ["hi", "gm", "hello", "xrpl", "lfg", "gmm", "helo", "halo", "halloe", "hii", "hey", "hay", "hei", "hai", "heloo", "gg", "gn", "yo"],
     
     // List of channel IDs to ignore in spam detection.
     // intros, general, faucet
     ignoredChannels: [
       "1144272382501081098",
       "1143643231930810462",
-      "1352703976050528327"
+      "1352703976050528327",
+      "1297011356310175796",
+      "1144274602902696019",
+      "1309228017343795272",
+      "1297016037027352586"
     ],
 
     // List of category IDs to ignore.
